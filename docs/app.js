@@ -44,7 +44,7 @@
     const songs = data.songs.map((s, i) => {
       if (!s || typeof s.uid !== 'string' || !/^s\d+$/.test(s.uid) || ids.has(s.uid) || typeof s.name !== 'string' || !s.name.trim()) throw new Error('进度中的歌曲信息无效。');
       ids.add(s.uid);
-      return { uid: s.uid, name: s.name.slice(0, 3000), artist: String(s.artist || '未知歌手').slice(0, 3000), songId: C.extractId(s.songId), url: C.httpURL(s.url), album: String(s.album || '').slice(0, 3000), cover: C.httpURL(s.cover), start: Number.isFinite(s.start) ? Math.max(0, s.start) : null, duration: Number.isFinite(s.duration) && s.duration > 0 ? Math.min(60, s.duration) : null };
+      return { uid: s.uid, name: s.name.slice(0, 3000), translation: String(s.translation || s.translated_name || '').slice(0, 3000), artist: String(s.artist || '未知歌手').slice(0, 3000), songId: C.extractId(s.songId), url: C.httpURL(s.url), album: String(s.album || '').slice(0, 3000), cover: C.httpURL(s.cover), start: Number.isFinite(s.start) ? Math.max(0, s.start) : null, duration: Number.isFinite(s.duration) && s.duration > 0 ? Math.min(60, s.duration) : null };
     });
     let session = null;
     if (data.session) {
@@ -220,7 +220,7 @@
         return `<article class="result-row${r.rank <= 3 ? ' result-top' : ''}" aria-label="第 ${r.rank} 名 ${esc(s.name)}"><div class="result-art">${artHTML(s)}<span class="rank">${String(r.rank).padStart(2, '0')}</span><button class="play-button" data-action="play" data-uid="${s.uid}" data-side="result" aria-label="试听 ${esc(s.name)}">▶</button></div>${titleHTML(r)}</article>`;
       }).join('')}</div></div>`).join('');
     }
-    $('#app').innerHTML = `<section class="results-head"><h2>偏好排名 · ${modeLabel()}</h2><p>${esc(state.name)} · 排名 ${rows.length} 首 · 已排除 ${engine.excluded.length} 首 · ${engine.comparisons} 次比较</p><div class="result-actions"><button class="button primary" data-action="export-results">↓ 导出排行 CSV</button><button class="button" data-action="export-backup">导出进度</button><button class="button" data-action="undo">↶ 撤销上次操作</button><button class="button" data-action="prepare">返回歌单</button></div></section><div class="results-display" data-result-view="${resultView}"><aside class="result-view-switch" aria-label="结果显示方式"><span>当前：${resultView === 'cover' ? '封面' : '列表'}</span><button class="button" data-action="toggle-result-view" aria-controls="result-content">${resultView === 'cover' ? '列表显示' : '封面显示'}</button></aside><section id="result-content" class="results-list${resultView === 'list' ? ' results-text' : ''}" aria-label="歌曲偏好排名">${content}</section></div><p class="result-note">并列歌曲共享名次，后续名次按歌曲数顺延。排除的歌曲不计入排名。${isTopMode() ? `<br>已确定目标名次及其顺序，临界并列全部保留；其余 ${engine.total - engine.excluded.length - rows.length} 首未排序。` : ''}</p>${engine.excluded.length ? `<details class="excluded-list"><summary>本轮已排除 ${engine.excluded.length} 首</summary><ul>${engine.excluded.map(id => `<li>${esc(map.get(id).name)} · ${esc(map.get(id).artist)}</li>`).join('')}</ul></details>` : ''}`;
+    $('#app').innerHTML = `<section class="results-head"><h2>偏好排名 · ${modeLabel()}</h2><p>${esc(state.name)} · 排名 ${rows.length} 首 · 已排除 ${engine.excluded.length} 首 · ${engine.comparisons} 次比较</p><div class="result-actions"><button class="button" data-action="save-result-image" ${imageExportBusy ? 'disabled' : ''}>保存长图</button><button class="button" data-action="preview-result-image" ${imageExportBusy ? 'disabled' : ''}>预览图片</button><button class="button" data-action="copy-result-text">复制文字</button><button class="button primary" data-action="export-results">↓ 导出排行 CSV</button><button class="button" data-action="export-backup">导出进度</button><button class="button" data-action="undo">↶ 撤销上次操作</button><button class="button" data-action="prepare">返回歌单</button></div></section><div class="results-display" data-result-view="${resultView}"><aside class="result-view-switch" aria-label="结果显示方式"><span>当前：${resultView === 'cover' ? '封面' : '列表'}</span><button class="button" data-action="toggle-result-view" aria-controls="result-content">${resultView === 'cover' ? '列表显示' : '封面显示'}</button></aside><section id="result-content" class="results-list${resultView === 'list' ? ' results-text' : ''}" aria-label="歌曲偏好排名">${content}</section></div><p class="result-note">并列歌曲共享名次，后续名次按歌曲数顺延。排除的歌曲不计入排名。${isTopMode() ? `<br>已确定目标名次及其顺序，临界并列全部保留；其余 ${engine.total - engine.excluded.length - rows.length} 首未排序。` : ''}</p>${engine.excluded.length ? `<details class="excluded-list"><summary>本轮已排除 ${engine.excluded.length} 首</summary><ul>${engine.excluded.map(id => `<li>${esc(map.get(id).name)} · ${esc(map.get(id).artist)}</li>`).join('')}</ul></details>` : ''}`;
   }
   function playlistIdFromInput(value) {
     const text = value.trim();
@@ -275,7 +275,7 @@
       const songs = result.songs.map((s, i) => {
         if (!s || typeof s.name !== 'string' || !s.name.trim() || !/^[1-9]\d{0,19}$/.test(s.songId) || seen.has(s.songId)) throw new Error('歌单歌曲信息不完整，原歌单未被替换。');
         seen.add(s.songId);
-        return { uid: 's' + i, name: s.name.slice(0, 3000), artist: String(s.artist || '未知歌手').slice(0, 3000), songId: s.songId, album: String(s.album || '').slice(0, 3000), cover: C.httpURL(s.cover), url: '', start: null, duration: null };
+        return { uid: 's' + i, name: s.name.slice(0, 3000), translation: String(s.translation || s.translated_name || '').slice(0, 3000), artist: String(s.artist || '未知歌手').slice(0, 3000), songId: s.songId, album: String(s.album || '').slice(0, 3000), cover: C.httpURL(s.cover), url: '', start: null, duration: null };
       });
       if (request.signal.aborted || playlistRequest !== request) return;
       await acceptPlaylist(songs, String(result.name || '网易云歌单').slice(0, 500));
@@ -350,6 +350,105 @@
     const rows = [['排名', '歌曲名称', '歌手名称', 'song_id'], ...C.flattenResults(engine).map(r => { const s = map.get(r.uid); return [r.rank, s.name, s.artist, s.songId]; })];
     download(`网易云歌单-${modeLabel()}-${dateStamp()}.csv`, '\uFEFF' + rows.map(row => row.map(C.csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
   }
+  let shareToolsPromise = null, imageExportBusy = false;
+  const sharedImageURLs = new Set();
+  function shareTools() {
+    if (window.TuneShare) return Promise.resolve(window.TuneShare);
+    if (!shareToolsPromise) shareToolsPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script'); script.src = 'share.js';
+      script.onload = () => window.TuneShare ? resolve(window.TuneShare) : fail();
+      const fail = () => { script.remove(); shareToolsPromise = null; reject(new Error('分享工具未加载，请确认已上传 share.js 后刷新。')); };
+      script.onerror = fail; document.head.append(script);
+    });
+    return shareToolsPromise;
+  }
+  function shareSnapshot() {
+    if (!engine?.done) throw new Error('请先完成排序。');
+    const map = songMap(), rows = C.flattenResults(engine);
+    const target = isTopMode() ? Math.min(engine.limit, engine.total - engine.excluded.length) : rows.length;
+    return { title: '网易云歌单喜好排名Top ' + target, mode: resultView, items: rows.map(row => {
+      const song = map.get(row.uid), image = document.querySelector(`[data-cover-slot="${song.uid}"] img`);
+      return { ...song, rank: row.rank, cover: song.cover || image?.currentSrc || image?.src || '' };
+    }) };
+  }
+  async function resolveShareCover(song) {
+    const cached = coverCache.get(song.songId);
+    if (cached && cached.expires > Date.now()) return cached.promise;
+    if (!song.songId || location.protocol === 'file:') return '';
+    const abort = new AbortController(), timer = setTimeout(() => abort.abort(), 10000);
+    try {
+      const path = '/api/cover?id=' + encodeURIComponent(song.songId);
+      const response = await fetch(typeof apiURL === 'function' ? apiURL(path) : path, { signal: abort.signal, credentials: 'omit' });
+      if (!response.ok) return '';
+      return C.httpURL((await response.json()).cover);
+    } finally { clearTimeout(timer); }
+  }
+  function showShareText(value) {
+    let dialog = $('#share-text-dialog');
+    if (!dialog) {
+      dialog = document.createElement('dialog'); dialog.id = 'share-text-dialog';
+      dialog.innerHTML = '<div class="dialog-header"><h2>文字分享</h2><button class="icon-button" data-share-close aria-label="关闭文字分享">×</button></div><p class="muted">自动复制不可用，可选中文字手动复制，或下载文本。</p><textarea class="share-text-content" aria-label="排名分享文字" readonly></textarea><div class="dialog-actions"><button class="button" data-share-download>下载 TXT</button><button class="button primary" data-share-close>关闭</button></div>';
+      document.body.append(dialog);
+      dialog.querySelectorAll('[data-share-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+      dialog.querySelector('[data-share-download]').addEventListener('click', () => download(`网易云歌单-排名分享-${dateStamp()}.txt`, '\uFEFF' + dialog.querySelector('textarea').value, 'text/plain;charset=utf-8'));
+    }
+    const textarea = dialog.querySelector('textarea'); textarea.value = value;
+    if (!dialog.open) dialog.showModal(); textarea.focus(); textarea.select();
+  }
+  function shareText() {
+    let snapshot;
+    try { snapshot = shareSnapshot(); } catch (error) { toast(error.message); return; }
+    // Keep clipboard access in the user-activation turn even on the first click.
+    const value = C.shareText(snapshot);
+    try {
+      if (!navigator.clipboard?.writeText) { showShareText(value); return; }
+      navigator.clipboard.writeText(value).then(() => toast('排名文字已复制。'), () => showShareText(value));
+    } catch { showShareText(value); }
+  }
+  async function shareImage(preview = false) {
+    if (imageExportBusy) return;
+    let snapshot;
+    try { snapshot = shareSnapshot(); } catch (error) { toast(error.message); return; }
+    let popup = null;
+    if (preview) {
+      popup = window.open('about:blank', '_blank');
+      if (popup) {
+        popup.opener = null; popup.document.title = '正在生成排名图片';
+        popup.document.body.textContent = '正在生成排名图片，请稍候…';
+      }
+    }
+    imageExportBusy = true;
+    document.querySelectorAll('[data-action=save-result-image], [data-action=preview-result-image]').forEach(button => button.disabled = true);
+    toast('正在生成长图…');
+    try {
+      const tools = await shareTools(), result = await tools.image(snapshot, { resolveCover: resolveShareCover });
+      const url = URL.createObjectURL(result.blob); sharedImageURLs.add(url);
+      const name = `${snapshot.title}-${snapshot.mode === 'cover' ? '封面' : '列表'}-${dateStamp()}.png`;
+      if (preview && popup && !popup.closed) popup.location.replace(url);
+      else if (preview) {
+        // A user-activated link still works when automatic popups are blocked.
+        let dialog = $('#share-image-dialog');
+        if (!dialog) {
+          dialog = document.createElement('dialog'); dialog.id = 'share-image-dialog';
+          dialog.innerHTML = '<h2>排名图片已生成</h2><p class="muted">点击下方链接打开图片，可在图片页面保存。</p><div class="dialog-actions"><a class="button primary" target="_blank" rel="noopener" data-share-image-link>打开图片</a><button class="button" data-share-image-close>关闭</button></div>';
+          dialog.querySelector('[data-share-image-close]').addEventListener('click', () => dialog.close()); document.body.append(dialog);
+        }
+        dialog.querySelector('[data-share-image-link]').href = url; if (!dialog.open) dialog.showModal();
+      } else {
+        const link = document.createElement('a'); link.href = url; link.download = name; document.body.append(link); link.click(); link.remove();
+        // Preview URLs remain valid for the current page; download-only URLs can be released.
+        setTimeout(() => { URL.revokeObjectURL(url); sharedImageURLs.delete(url); }, 60000);
+      }
+      toast(result.missingCovers ? `长图已生成；${result.missingCovers} 首封面未能载入，已保留占位。` : preview ? '图片已生成，可在图片页面保存。' : '长图已生成，正在保存 PNG。');
+    } catch (error) {
+      if (popup && !popup.closed) popup.close();
+      toast('生成失败：' + (error.message || '请重试或使用文字分享。'));
+    } finally {
+      imageExportBusy = false;
+      document.querySelectorAll('[data-action=save-result-image], [data-action=preview-result-image]').forEach(button => button.disabled = false);
+    }
+  }
+  window.addEventListener('pagehide', event => { if (!event.persisted) { sharedImageURLs.forEach(url => URL.revokeObjectURL(url)); sharedImageURLs.clear(); } });
   function exportBackup() { download(`网易云歌单-排序进度-${dateStamp()}.json`, JSON.stringify({ version: 1, ...state }, null, 2), 'application/json'); toast('进度已导出。本地音频文件不会打包进备份。'); }
   async function importBackup(file) {
     try {
@@ -520,6 +619,9 @@
     else if (action === 'export-backup') exportBackup();
     else if (action === 'import-backup') $('#backup-file').click();
     else if (action === 'export-results') exportResults();
+    else if (action === 'save-result-image') shareImage(false);
+    else if (action === 'preview-result-image') shareImage(true);
+    else if (action === 'copy-result-text') shareText();
     else if (action === 'import-audio') { stopAudio(); $('#audio-files').click(); }
     else if (action === 'sequence') sequence();
     else if (action === 'play') playManual(button.dataset.uid, button.dataset.side);

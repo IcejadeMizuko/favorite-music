@@ -24,6 +24,7 @@
   }
   const aliases = {
     name: ['歌曲名称', '歌曲名', '歌名', '歌曲', 'song_name', 'songname', 'name', 'title', 'track', 'track_name'],
+    translation: ['translation', 'translated_name', '译名', '翻译', '歌曲翻译', '翻译名', 'transname', 'tns'],
     artist: ['歌手名称', '歌手', '歌手名', '艺人', 'artist', 'artists', 'artist_name', 'artistname', 'singer'],
     songId: ['song_id', 'songid', '歌曲id', '音乐id', '网易云id', 'netease_id', 'id'],
     url: ['preview_url', 'audio_url', '试听链接', '试听地址', '音频地址', '播放链接', 'mp3_url'],
@@ -59,7 +60,7 @@
       const songId = extractId(val('songId')) || extractId(val('link'));
       const key = songId ? 'id:' + songId : 'name:' + trackKey(val('name'), val('artist'));
       if (seen.has(key)) { duplicates++; continue; } seen.add(key);
-      songs.push({ uid: 's' + songs.length, name: val('name'), artist: val('artist') || '未知歌手', songId,
+      songs.push({ uid: 's' + songs.length, name: val('name'), translation: val('translation'), artist: val('artist') || '未知歌手', songId,
         url: httpURL(val('url')), album: val('album'), cover: httpURL(val('cover')),
         start: val('start') !== '' && Number.isFinite(Number(val('start'))) ? Math.max(0, Number(val('start'))) : null,
         duration: val('duration') !== '' && Number(val('duration')) > 0 ? Math.min(60, Number(val('duration'))) : null });
@@ -192,6 +193,16 @@
     if (/^[=+@\-\t\r]/.test(s)) s = "'" + s;
     return '"' + s.replace(/"/g, '""') + '"';
   }
-  const api = { parseCSV, importCSV, normalize, trackKey, httpURL, extractId, bounds, topBounds, createEngine, createTournamentEngine, choose, exclude, pair, flattenResults, csvCell };
+  function shareSongTitle(song) {
+    const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+    const name = clean(song.name), translation = clean(song.translation);
+    if (!translation || translation === name || name.includes('(' + translation + ')') || name.includes('（' + translation + '）')) return name;
+    return name + '(' + translation + ')';
+  }
+  function shareText(snapshot) {
+    const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+    return snapshot.title + ':\n\n' + snapshot.items.map(song => `${song.rank}. ${shareSongTitle(song)} - ${clean(song.artist) || '未知歌手'}`).join('\n');
+  }
+  const api = { shareSongTitle, shareText, parseCSV, importCSV, normalize, trackKey, httpURL, extractId, bounds, topBounds, createEngine, createTournamentEngine, choose, exclude, pair, flattenResults, csvCell };
   if (typeof module !== 'undefined') module.exports = api; else root.TuneCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

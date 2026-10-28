@@ -250,3 +250,7 @@ dialog::backdrop { background: #18223069; }
   .result-artist, .result-note { font-size: 10px; }
   .site-footer { font-size: 10px; }
 }
+
+.share-text-content { display: block; width: 100%; min-height: 280px; max-height: 52vh; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: #fafbfc; font: 14px/1.8 "Segoe UI", "Microsoft YaHei", sans-serif; }
+#share-text-dialog .muted, #share-image-dialog .muted { font-size: 12px; line-height: 1.8; }
+#share-image-dialog a.button { text-decoration: none; }
