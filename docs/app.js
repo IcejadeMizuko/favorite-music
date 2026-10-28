@@ -399,22 +399,21 @@
     if (!s.songId) throw new Error('缺少音源：请补充 song_id 或导入本地音频。');
     const cached = sourceCache.get(s.songId);
     if (cached && cached.expires > Date.now()) return cached;
+    let resolutionError = '';
     if (location.protocol !== 'file:') {
       try {
         const response = await fetch(apiURL('/api/preview?id=' + encodeURIComponent(s.songId)), { signal, credentials: 'omit' });
-        if (response.ok) {
-          const result = await response.json();
-          if (result.error) throw Object.assign(new Error(result.error), { unavailable: true });
-          const url = C.httpURL(result.url);
-          if (url) { const source = { url, trial: !!result.trial, expires: Date.now() + 5 * 60 * 1000 }; sourceCache.set(s.songId, source); return source; }
-        }
-      } catch (e) { if (e.name === 'AbortError' || e.unavailable) throw e; }
+        const result = await response.json();
+        const url = response.ok && C.httpURL(result.url);
+        if (url) { const source = { url, trial: !!result.trial, expires: Date.now() + 5 * 60 * 1000 }; sourceCache.set(s.songId, source); return source; }
+        resolutionError = result.error || `音源接口返回 HTTP ${response.status}`;
+      } catch (e) { if (e.name === 'AbortError') throw e; resolutionError = e.message || '音源接口暂不可用'; }
     }
-    return { url: `https://music.163.com/song/media/outer/url?id=${s.songId}.mp3` };
+    return { url: `https://music.163.com/song/media/outer/url?id=${s.songId}.mp3`, fallback: true, resolutionError };
   }
   async function playOne(uid, side) {
     stopPlayback(); const version = playbackVersion, s = songMap().get(uid); if (!s) return 'failed';
-    const abort = new AbortController(); let finish, finished = false, timeout, stallTimer, startAt = 0, hasPlayed = false, seconds = s.duration || state.settings.seconds;
+    const abort = new AbortController(); let finish, finished = false, timeout, stallTimer, startAt = 0, hasPlayed = false, seconds = s.duration || state.settings.seconds, usingFallback = false;
     const completion = new Promise(resolve => { finish = resolve; });
     const cleanups = [];
     function on(event, callback) { player.addEventListener(event, callback); cleanups.push(() => player.removeEventListener(event, callback)); }
@@ -429,7 +428,9 @@
     try {
       const source = await resolveSource(s, abort.signal);
       if (finished || version !== playbackVersion) return completion;
-      setStatus(side, '正在缓冲试听…');
+      usingFallback = !!source.fallback;
+      if (usingFallback) { clearTimeout(timeout); timeout = setTimeout(() => settle('failed', '公开外链响应超时，可在网易云打开或补充本地音频。', true), 15000); }
+      setStatus(side, usingFallback ? '接口未取得音源，正在尝试网易云公开外链…' : '正在缓冲试听…');
       startAt = s.start ?? (source.trial ? 0 : state.settings.start);
       player.volume = state.settings.volume;
       on('loadedmetadata', () => {
@@ -445,13 +446,13 @@
         else setStatus(side, `正在试听 ${Math.floor(elapsed)} / ${seconds} 秒`);
       });
       on('ended', () => settle('finished', '试听片段结束 · 可点击重听'));
-      on('error', () => settle('failed', audioPool.has(uid) ? '此音频格式无法播放，请改用 MP3 / WAV。' : '此音源无法播放，可在网易云打开或补充本地音频。', true));
+      on('error', () => settle('failed', audioPool.has(uid) ? '此音频格式无法播放，请改用 MP3 / WAV。' : usingFallback ? '音源接口和公开外链均未能播放，可在网易云打开或补充本地音频。' : '此音源无法播放，可在网易云打开或补充本地音频。', true));
       player.src = source.url;
       try { await player.play(); }
       catch (e) {
         if (!finished && version === playbackVersion) {
           if (e.name === 'NotAllowedError') settle('blocked', '浏览器阻止自动播放，请点击试听按钮。', true);
-          else settle('failed', '音源无法播放，请检查链接或补充本地音频。', true);
+          else settle('failed', usingFallback ? '音源接口和公开外链均未能播放，可在网易云打开或补充本地音频。' : '音源无法播放，请检查链接或补充本地音频。', true);
         }
       }
     } catch (e) { if (!finished && version === playbackVersion) settle('failed', e.message || '试听获取失败。', true); }
