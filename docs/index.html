@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6f8"><meta name="description" content="导入网易云歌单链接或 CSV，通过两首比较生成偏好排名，支持封面、试听、并列、本轮排除、撤销和进度保存。">
+  <title>网易云歌单偏好排序</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js" defer></script><script src="core.js" defer></script><script src="sample-data.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><h1 class="site-title">网易云歌单偏好排序</h1><button class="text-button" data-action="help">使用说明</button></header>
+  <main>
+    <nav class="steps" aria-label="排序步骤"><button data-action="prepare" id="nav-prepare"><span>01</span> 准备歌单</button><span class="step-line"></span><button data-action="compare" id="nav-compare"><span>02</span> 听歌选择</button><span class="step-line"></span><button data-action="results" id="nav-results"><span>03</span> 我的排行</button></nav>
+    <div id="app"></div>
+  </main>
+  <footer class="site-footer"><span id="save-status">进度保存在当前浏览器</span></footer>
+  <input type="file" id="csv-file" accept=".csv,.tsv,text/csv" hidden>
+  <input type="file" id="audio-files" accept="audio/*,.flac,.ogg,.m4a,.wav,.mp3" multiple hidden>
+  <input type="file" id="backup-file" accept=".json,application/json" hidden>
+  <audio id="player" preload="none"></audio>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <dialog id="help-dialog"><div class="dialog-header"><h2>使用说明</h2><button data-action="close-help" class="icon-button" aria-label="关闭说明">×</button></div><div class="help-content"><p><b>导入歌单</b><br>打开网站后，可粘贴网易云完整歌单链接或数字歌单 ID，自动获取歌曲 ID、歌手和封面，并核对歌曲数量；不完整时保留原歌单。短链接请先在浏览器打开。也支持「序号、歌曲名称、歌手名称」CSV，以及 UTF-8 和 GB18030 编码。勾选参与排序的歌曲。</p><p><b>比较与排序</b><br>选择更喜欢的一首，或者选择「一样喜欢」。选择「前 5／10／30／50 名」时使用锦标赛树，确定目标名次及顺序后自动停止；选择「全部歌曲」时采用归并比较生成完整排名。临界并列全部保留，结果可能超过目标数量。并列歌曲作为一组进入后续比较，使用其中一首代表试听。完整排名显示归并工作进度，前 N 名显示预计进度与已确定数量。目标设置只影响新一轮排序。点击「排除左曲／排除右曲」可移除本轮不想排名的歌曲，支持撤销。并列组只排除当前显示的一首；剩余一首时自动完成。</p><p><b>试听</b><br>启用「每轮自动试听」后，依次播放左、右两首。可设起点和时长，也可单独重听。浏览器阻止自动播放时，请点击试听按钮。空格停止，A / D 试听，← / → 选择，T 并列，Z 撤销。</p><p><b>封面</b><br>在线接口配置完成后，当前两首歌曲可根据 <code>song_id</code> 自动获取网易云专辑封面，也可在 CSV 中提供 <code>cover_url</code>。封面失败不影响排序。<br><br><b>音源字段</b><br>在 CSV 中加入 <code>song_id</code> 可尝试获取网易云公开播放地址。部分歌曲可能无法播放。也支持 <code>preview_url</code>，或选择以歌曲 ID / 歌曲名称命名的本地音频；出现多个匹配文件时需确认。</p><p><b>进度保存</b><br>每次选择保存在当前浏览器。使用「导出进度」备份，通过「恢复进度」迁移到其他浏览器。本地音频需要重新选择。重新导入补充了 ID 的同一份歌单时，可保留排序进度。</p><p class="muted">排序记录保存在当前浏览器。链接导入会通过 Cloudflare 接口查询网易云；在线试听会连接音频来源，无需账号或 Cookie。</p></div><button class="button primary full" data-action="close-help">关闭</button></dialog>
+  <dialog id="confirm-dialog"><h2 id="confirm-title"></h2><p id="confirm-body"></p><div class="dialog-actions"><button class="button" id="confirm-cancel">取消</button><button class="button primary" id="confirm-ok">确认</button></div></dialog>
+  <dialog id="audio-dialog"><h2>为当前歌曲选择音频</h2><p class="muted">此歌曲有多个可能匹配的文件，请确认使用哪一个。</p><div id="audio-options"></div><button class="button full" data-action="close-audio">取消</button></dialog>
+</body>
+</html>
