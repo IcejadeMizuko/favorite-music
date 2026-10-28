@@ -3,6 +3,9 @@
   'use strict';
   const C = window.TuneCore, $ = s => document.querySelector(s);
   const STORAGE = 'tune-order:v1';
+  const RESULT_VIEW_STORAGE = STORAGE + ':result-view';
+  let resultView = 'cover';
+  try { if (localStorage.getItem(RESULT_VIEW_STORAGE) === 'list') resultView = 'list'; } catch {}
   const defaults = { seconds: 10, start: 30, autoplay: true, shuffle: true, volume: .65, topN: 10 };
   let state = { songs: [], selected: [], name: '', settings: { ...defaults }, session: null };
   let engine = null, view = 'prepare', query = '', toastTimer, confirmResolve;
@@ -12,9 +15,9 @@
   let playlistRequest = null;
   function apiURL(path) {
     const value = String(window.TUNE_CONFIG?.API_BASE || '').trim().replace(/\/+$/, '');
-    if (!value) throw new Error('网站尚未配置接口地址，请在 config.js 中填写 Cloudflare Worker 地址。');
+    if (!value) throw new Error('网站尚未配置接口地址，请在 config.js 中填写 云端接口的 HTTPS 域名。');
     const url = new URL(value);
-    if (url.protocol !== 'https:' || url.pathname !== '/' || url.username || url.password || url.search || url.hash) throw new Error('config.js 的 API_BASE 应为 Worker 的 HTTPS 地址，不带路径。');
+    if (url.protocol !== 'https:' || url.pathname !== '/' || url.username || url.password || url.search || url.hash) throw new Error('config.js 的 API_BASE 应为 云端接口的 HTTPS 域名，不带路径。');
     return url.origin + path;
   }
   const player = $('#player');
@@ -159,7 +162,7 @@
           const abort = new AbortController(), timeout = setTimeout(() => abort.abort(), 10000);
           try {
             const response = await fetch(apiURL('/api/cover?id=' + encodeURIComponent(id)), { signal: abort.signal, credentials: 'omit' });
-            if (!response.ok) throw new Error('封面接口不可用，请检查 Worker 配置');
+            if (!response.ok) throw new Error('封面接口不可用，请检查接口配置');
             const result = await response.json();
             const cover = C.httpURL(result.cover); if (!cover) throw new Error(result.error || '暂无封面');
             return cover;
@@ -196,13 +199,28 @@
     if (!engine?.done) { view = 'prepare'; render(); return; }
     const rows = C.flattenResults(engine), map = songMap(), counts = new Map();
     for (const r of rows) counts.set(r.rank, (counts.get(r.rank) || 0) + 1);
-    const tiers = [];
-    for (let i = 0, size = 1; i < rows.length; size = Math.min(3, size + 1)) {
-      tiers.push(rows.slice(i, i + size)); i += size;
+    const titleHTML = r => {
+      const s = map.get(r.uid);
+      return `<div class="result-name">${esc(s.name)}${counts.get(r.rank) > 1 ? '<span class="tie-tag">并列</span>' : ''}</div><div class="result-artist">${esc(s.artist)}</div>`;
+    };
+    let content;
+    if (resultView === 'list') {
+      content = `<div class="result-table-head" aria-hidden="true"><span>名次</span><span>歌曲 / 歌手</span><span>试听</span></div>${rows.map(r => {
+        const s = map.get(r.uid);
+        return `<article class="result-row result-text-row${r.rank <= 3 ? ' result-top' : ''}" aria-label="第 ${r.rank} 名 ${esc(s.name)}"><span class="rank">${String(r.rank).padStart(2, '0')}</span><div class="result-text-meta">${titleHTML(r)}</div><button class="play-button" data-action="play" data-uid="${s.uid}" data-side="result" aria-label="试听 ${esc(s.name)}">▶</button></article>`;
+      }).join('')}`;
+    } else {
+      const tiers = [];
+      for (let i = 0; i < rows.length;) {
+        const size = i === 0 ? 1 : i < 10 ? 3 : 7;
+        tiers.push({ rows: rows.slice(i, i + size), size, start: i }); i += size;
+      }
+      content = tiers.map(tier => `<div class="ranking-line${tier.size === 7 ? ' ranking-line-dense' : ''}"${tier.size === 7 ? ` tabindex="0" role="region" aria-label="结果第 ${tier.start + 1} 至 ${tier.start + tier.rows.length} 首，窄屏可横向滚动"` : ''}><div class="ranking-tier${tier.size === 7 ? ' ranking-tier-seven' : ''}">${tier.rows.map(r => {
+        const s = map.get(r.uid);
+        return `<article class="result-row${r.rank <= 3 ? ' result-top' : ''}" aria-label="第 ${r.rank} 名 ${esc(s.name)}"><div class="result-art">${artHTML(s)}<span class="rank">${String(r.rank).padStart(2, '0')}</span><button class="play-button" data-action="play" data-uid="${s.uid}" data-side="result" aria-label="试听 ${esc(s.name)}">▶</button></div>${titleHTML(r)}</article>`;
+      }).join('')}</div></div>`).join('');
     }
-    $('#app').innerHTML = `<section class="results-head"><h2>偏好排名 · ${modeLabel()}</h2><p>${esc(state.name)} · 排名 ${rows.length} 首 · 已排除 ${engine.excluded.length} 首 · ${engine.comparisons} 次比较</p><div class="result-actions"><button class="button primary" data-action="export-results">↓ 导出排行 CSV</button><button class="button" data-action="export-backup">导出进度</button><button class="button" data-action="undo">↶ 撤销上次操作</button><button class="button" data-action="prepare">返回歌单</button></div></section><section class="results-list" aria-label="歌曲偏好排名">${tiers.map(tier => `<div class="ranking-tier">${tier.map(r => {
-      const s = map.get(r.uid); return `<article class="result-row${r.rank <= 3 ? ' result-top' : ''}" aria-label="第 ${r.rank} 名 ${esc(s.name)}"><div class="result-art">${artHTML(s)}<span class="rank">${String(r.rank).padStart(2, '0')}</span><button class="play-button" data-action="play" data-uid="${s.uid}" data-side="result" aria-label="试听 ${esc(s.name)}">▶</button></div><div class="result-name">${esc(s.name)}${counts.get(r.rank) > 1 ? '<span class="tie-tag">并列</span>' : ''}</div><div class="result-artist">${esc(s.artist)}</div></article>`;
-    }).join('')}</div>`).join('')}</section><p class="result-note">并列歌曲共享名次，后续名次按歌曲数顺延。排除的歌曲不计入排名。${isTopMode() ? `<br>已确定目标名次及其顺序，临界并列全部保留；其余 ${engine.total - engine.excluded.length - rows.length} 首未排序。` : ''}</p>${engine.excluded.length ? `<details class="excluded-list"><summary>本轮已排除 ${engine.excluded.length} 首</summary><ul>${engine.excluded.map(id => `<li>${esc(map.get(id).name)} · ${esc(map.get(id).artist)}</li>`).join('')}</ul></details>` : ''}`;
+    $('#app').innerHTML = `<section class="results-head"><h2>偏好排名 · ${modeLabel()}</h2><p>${esc(state.name)} · 排名 ${rows.length} 首 · 已排除 ${engine.excluded.length} 首 · ${engine.comparisons} 次比较</p><div class="result-actions"><button class="button primary" data-action="export-results">↓ 导出排行 CSV</button><button class="button" data-action="export-backup">导出进度</button><button class="button" data-action="undo">↶ 撤销上次操作</button><button class="button" data-action="prepare">返回歌单</button></div></section><div class="results-display" data-result-view="${resultView}"><aside class="result-view-switch" aria-label="结果显示方式"><span>当前：${resultView === 'cover' ? '封面' : '列表'}</span><button class="button" data-action="toggle-result-view" aria-controls="result-content">${resultView === 'cover' ? '列表显示' : '封面显示'}</button></aside><section id="result-content" class="results-list${resultView === 'list' ? ' results-text' : ''}" aria-label="歌曲偏好排名">${content}</section></div><p class="result-note">并列歌曲共享名次，后续名次按歌曲数顺延。排除的歌曲不计入排名。${isTopMode() ? `<br>已确定目标名次及其顺序，临界并列全部保留；其余 ${engine.total - engine.excluded.length - rows.length} 首未排序。` : ''}</p>${engine.excluded.length ? `<details class="excluded-list"><summary>本轮已排除 ${engine.excluded.length} 首</summary><ul>${engine.excluded.map(id => `<li>${esc(map.get(id).name)} · ${esc(map.get(id).artist)}</li>`).join('')}</ul></details>` : ''}`;
   }
   function playlistIdFromInput(value) {
     const text = value.trim();
@@ -492,6 +510,12 @@
     else if (action === 'prepare') { view = 'prepare'; render(); }
     else if (action === 'compare' && engine && !engine.done) { view = 'compare'; render(); if (state.settings.autoplay) sequence(); }
     else if (action === 'results' && engine?.done) { view = 'results'; render(); }
+    else if (action === 'toggle-result-view' && view === 'results' && engine?.done) {
+      resultView = resultView === 'cover' ? 'list' : 'cover';
+      try { localStorage.setItem(RESULT_VIEW_STORAGE, resultView); } catch {}
+      render();
+      $('[data-action=toggle-result-view]')?.focus({ preventScroll: true });
+    }
     else if (action === 'sample') acceptPlaylist(C.importCSV(window.SAMPLE_CSV).songs, '示例歌单');
     else if (action === 'export-backup') exportBackup();
     else if (action === 'import-backup') $('#backup-file').click();
